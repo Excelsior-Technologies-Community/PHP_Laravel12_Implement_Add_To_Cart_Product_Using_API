@@ -8,17 +8,18 @@ use App\Models\Cart;
 
 class CartController extends Controller
 {
-
+    /**
+     * Add product to cart
+     */
     public function addToCart(Request $request)
     {
         $request->validate([
             'product_id' => 'required|exists:products,id',
-            'quantity'   => 'nullable|integer|min:1'
+            'quantity' => 'nullable|integer|min:1'
         ]);
 
-        $quantity = $request->quantity ?? 1; // default = 1
+        $quantity = $request->quantity ?? 1;
 
-        // Get product
         $product = Product::where('id', $request->product_id)
             ->where('status', 1)
             ->first();
@@ -27,25 +28,21 @@ class CartController extends Controller
             return response()->json(['message' => 'Product not available'], 404);
         }
 
-        // Check existing cart
         $cart = Cart::where('product_id', $product->id)
             ->where('status', 1)
-            ->whereNull('deleted_at')
             ->first();
 
         if ($cart) {
-            // Increase quantity dynamically
             $cart->quantity += $quantity;
-            $cart->price = $product->price; // keep latest price
+            $cart->price = $product->price;
             $cart->updated_by = 1;
             $cart->save();
         } else {
-            // Add new cart row
             Cart::create([
                 'product_id' => $product->id,
-                'quantity'   => $quantity,
-                'price'      => $product->price,
-                'status'     => 1,
+                'quantity' => $quantity,
+                'price' => $product->price,
+                'status' => 1,
                 'created_by' => 1
             ]);
         }
@@ -53,33 +50,30 @@ class CartController extends Controller
         return response()->json(['message' => 'Product added to cart successfully']);
     }
 
-
     /**
-     * View cart
+     * View cart items
      */
     public function viewCart()
     {
-        return response()->json(
-            Cart::with('product')
-                ->where('status', 1)
-                ->whereNull('deleted_at')
-                ->get()
-        );
+        $cartItems = Cart::with('product')
+            ->where('status', 1)
+            ->get();
+
+        return response()->json($cartItems);
     }
 
     /**
-     * Update cart quantity (POST)
+     * Update cart quantity
      */
     public function updateCart(Request $request)
     {
         $request->validate([
-            'cart_id'  => 'required|integer',
+            'cart_id' => 'required|integer|exists:carts,id',
             'quantity' => 'required|integer|min:1'
         ]);
 
-        $cart = Cart::findOrFail($request->cart_id);
-
-        $cart->quantity   = $request->quantity;
+        $cart = Cart::find($request->cart_id);
+        $cart->quantity = $request->quantity;
         $cart->updated_by = 1;
         $cart->save();
 
@@ -87,23 +81,25 @@ class CartController extends Controller
     }
 
     /**
-     * Remove cart item (Soft delete + status=0)
+     * Remove single cart item
      */
     public function removeFromCart(Request $request)
     {
-        $cart = Cart::findOrFail($request->cart_id);
+        $request->validate([
+            'cart_id' => 'required|integer|exists:carts,id'
+        ]);
 
+        $cart = Cart::find($request->cart_id);
         $cart->status = 0;
         $cart->updated_by = 1;
         $cart->save();
-
         $cart->delete();
 
         return response()->json(['message' => 'Cart item removed']);
     }
 
     /**
-     * Clear cart
+     * Clear entire cart
      */
     public function clearCart()
     {
